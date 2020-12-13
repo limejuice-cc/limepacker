@@ -48,6 +48,7 @@ type dockerBuilder struct {
 
 	tags      []string
 	buildArgs map[string]*string
+	env       []string
 
 	outputDirectory string
 	output          []byte
@@ -244,6 +245,7 @@ func (b *dockerBuilder) exec() error {
 	ctx := context.Background()
 	config := &container.Config{
 		Image: b.imageID,
+		Env:   b.env,
 	}
 	hostConfig := &container.HostConfig{}
 	networkingConfig := &network.NetworkingConfig{}
@@ -390,14 +392,69 @@ func (o *dockerExtraFileOption) Apply(build interface{}) error {
 	return nil
 }
 
-// WithFile specifies optional files
-func WithFile(name string, reader io.Reader) DockerBuildOption {
+// WitExtrahFile specifies optional files
+func WitExtrahFile(name string, reader io.Reader) DockerBuildOption {
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, reader); err != nil {
 		log.Panic().Msg("error cannot read file")
 		return nil
 	}
 	return &dockerExtraFileOption{name: name, body: buf.Bytes()}
+}
+
+type dockerTagOption struct {
+	tag string
+}
+
+func (o *dockerTagOption) Apply(build interface{}) error {
+	b, ok := build.(*dockerBuilder)
+	if !ok {
+		return errors.New("unexpected error")
+	}
+	b.tags = append(b.tags, o.tag)
+	return nil
+}
+
+// WithDockerTag specifies a tag
+func WithDockerTag(tag string) DockerBuildOption {
+	return &dockerTagOption{tag: tag}
+}
+
+type dockerBuildArgOption struct {
+	name  string
+	value string
+}
+
+func (o *dockerBuildArgOption) Apply(build interface{}) error {
+	b, ok := build.(*dockerBuilder)
+	if !ok {
+		return errors.New("unexpected error")
+	}
+	b.buildArgs[o.name] = &o.value
+	return nil
+}
+
+// WithDockerBuildArg specifies an optional docker build arg
+func WithDockerBuildArg(name, value string) DockerBuildOption {
+	return &dockerBuildArgOption{name: name, value: value}
+}
+
+type dockerBuildEnvOption struct {
+	value string
+}
+
+func (o *dockerBuildEnvOption) Apply(build interface{}) error {
+	b, ok := build.(*dockerBuilder)
+	if !ok {
+		return errors.New("unexpected error")
+	}
+	b.env = append(b.env, o.value)
+	return nil
+}
+
+// WithDockerEnv specifies an optional env value
+func WithDockerEnv(value string) DockerBuildOption {
+	return &dockerBuildEnvOption{value: value}
 }
 
 // NewDockerBuild creates a new Docker Build
@@ -408,6 +465,7 @@ func NewDockerBuild(dockerFile, outputDirectory string, options ...DockerBuildOp
 		extraFiles:      []*dockerBuildFile{},
 		tags:            []string{},
 		buildArgs:       map[string]*string{},
+		env:             []string{},
 		outputDirectory: outputDirectory,
 	}
 	for _, opt := range options {
